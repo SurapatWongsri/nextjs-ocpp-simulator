@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>INFINITY - Pro OCPP 1.6 Simulator</title>
+    
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Tailwind Configuration -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            light: '#00f2fe',
+                            DEFAULT: '#4facfe',
+                            dark: '#0072ff',
+                        },
+                        dark: {
+                            bg: '#0B101E',
+                            card: '#151C2C',
+                            border: '#2A3441'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #0B101E;
+            background-image: 
+                radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
+                radial-gradient(at 50% 0%, hsla(225,39%,30%,0.1) 0, transparent 50%), 
+                radial-gradient(at 100% 0%, hsla(339,49%,30%,0.1) 0, transparent 50%);
+            background-attachment: fixed;
+        }
+
+        /* Pro Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2A3441; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3f4d61; }
+
+        /* LED Indicators */
+        .led-box { display: flex; gap: 12px; align-items: center; }
+        .indicator {
+            width: 12px; height: 12px; border-radius: 50%;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.6);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        .indicator::after {
+            content: ''; position: absolute; top: -2px; left: -2px; right: -2px; bottom: -2px;
+            border-radius: 50%; z-index: -1; opacity: 0; transition: opacity 0.3s;
+        }
+        
+        #red { background-color: #ef4444; }
+        #red.active { background-color: #ff5555; box-shadow: 0 0 15px #ef4444; }
+        #yellow { background-color: #eab308; }
+        #yellow.active { background-color: #ffcc00; box-shadow: 0 0 15px #eab308; }
+        #green { background-color: #22c55e; }
+        #green.active { background-color: #44ff77; box-shadow: 0 0 15px #22c55e; }
+        #blue { background-color: #3b82f6; }
+        #blue.active { background-color: #55aaff; box-shadow: 0 0 15px #3b82f6; }
+
+        .glass-card {
+            background: rgba(21, 28, 44, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(42, 52, 65, 0.8);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        /* Digital Display Input */
+        .digital-input {
+            background: #05080f;
+            color: #4facfe;
+            text-shadow: 0 0 5px rgba(79, 172, 254, 0.5);
+            font-family: 'JetBrains Mono', monospace;
+            border: 1px solid #1a2333;
+        }
+        .digital-input:focus {
+            box-shadow: 0 0 0 2px rgba(79, 172, 254, 0.2);
+            border-color: #4facfe;
+            outline: none;
+        }
+
+        /* Terminal Logs */
+        .log-time { color: #64748b; font-size: 0.75rem; margin-right: 8px; }
+        .log-req { color: #38bdf8; } /* Light Blue */
+        .log-res { color: #4ade80; } /* Light Green */
+        .log-err { color: #f87171; } /* Light Red */
+        .log-info { color: #e2e8f0; }
+    </style>
+</head>
+<body class="text-slate-300 min-h-screen flex flex-col">
+
+    <!-- Toast Container (เพิ่มใหม่สำหรับแสดง Notification) -->
+    <div id="toast-container" class="fixed top-5 right-5 z-[100] flex flex-col gap-3 pointer-events-none"></div>
+
+    <select style="display: none"><option value="">OCPP-J1.6</option></select>
+
+    <!-- Top Navigation -->
+    <nav class="border-b border-dark-border bg-dark-bg/80 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-[1400px] mx-auto px-4 lg:px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-brand/20">
+                    <i class="fa-solid fa-bolt"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 tracking-wide">
+                        INFINITY <span class="text-xs font-mono text-brand border border-brand/30 bg-brand/10 px-1.5 py-0.5 rounded ml-1">v1.6</span>
+                    </h1>
+                </div>
+            </div>
+            
+            <div class="led-box bg-dark-card px-4 py-1.5 rounded-full border border-dark-border">
+                <div class="flex items-center gap-2 mr-2 border-r border-dark-border pr-3">
+                    <span class="text-xs text-slate-400 font-mono uppercase tracking-wider" id="status-text">DISCONNECTED</span>
+                </div>
+                <span class="indicator active" id="red" title="Disconnected/Error"></span>
+                <span class="indicator" id="yellow" title="Connected/Standby"></span>
+                <span class="indicator" id="green" title="Charging/Active"></span>
+                <span class="indicator" id="blue" title="Data Transfer"></span>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-grow p-4 lg:p-6 max-w-[1400px] mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left Panel: Controls (5 columns on large screens) -->
+        <div class="lg:col-span-5 flex flex-col gap-5">
+            
+            <!-- Connection Setup -->
+            <div class="glass-card rounded-2xl p-5">
+                <h2 class="text-sm font-semibold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-network-wired text-brand"></i> Endpoint Connection
+                </h2>
+                <div class="flex gap-2">
+                    <div class="relative flex-grow">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fa-solid fa-link text-slate-500 text-sm"></i>
+                        </div>
+                        <input id="CP" type="text" class="w-full bg-slate-900/50 border border-dark-border rounded-xl pl-9 pr-4 py-2.5 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand text-slate-200 font-mono text-sm transition-all" 
+                            value="wss://api-ocpp.bs-group.tech/ocpp/111">
+                    </div>
+                    <button id="connect" class="bg-brand hover:bg-brand-dark text-white font-medium px-6 py-2.5 rounded-xl transition-all shadow-[0_0_15px_rgba(79,172,254,0.3)] hover:shadow-[0_0_20px_rgba(79,172,254,0.5)] flex items-center gap-2 whitespace-nowrap">
+                        <i class="fa-solid fa-plug"></i> <span id="connect-text">Connect</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Identity & Status -->
+            <div class="glass-card rounded-2xl p-5">
+                <h2 class="text-sm font-semibold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-id-badge text-purple-400"></i> Charge Point Identity
+                </h2>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1.5">RFID Tag</label>
+                        <div class="relative">
+                            <i class="fa-solid fa-tag absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500 text-xs"></i>
+                            <input id="TAG" type="text" class="w-full bg-slate-900/50 border border-dark-border rounded-lg pl-8 pr-3 py-2 text-sm focus:border-purple-400 focus:outline-none focus:ring-1 focus:ring-purple-400 font-mono" value="MACXAAAA100">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1.5">Connector UID</label>
+                        <div class="relative">
+                            <i class="fa-solid fa-plug-circle-check absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500 text-xs"></i>
+                            <input id="CUID" type="text" class="w-full bg-slate-900/50 border border-dark-border rounded-lg pl-8 pr-3 py-2 text-sm focus:border-purple-400 focus:outline-none focus:ring-1 focus:ring-purple-400 font-mono" value="1">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1.5">Transaction ID</label>
+                        <input id="transactionId" type="text" class="w-full bg-slate-900/50 border border-dark-border rounded-lg px-3 py-2 text-sm focus:border-purple-400 focus:outline-none font-mono text-slate-400" value="1" readonly>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1.5">Connector Status</label>
+                        <div class="relative">
+                            <select id="ConnectorStatus" class="w-full bg-slate-900/50 border border-dark-border rounded-lg pl-3 pr-8 py-2 text-sm focus:border-purple-400 focus:outline-none appearance-none cursor-pointer">
+                                <option value="Available">Available</option>
+                                <option value="Preparing">Preparing</option>
+                                <option value="Charging">Charging</option>
+                                <option value="SuspendedEV">SuspendedEV</option>
+                                <option value="SuspendedEVSE">SuspendedEVSE</option>
+                                <option value="Finishing">Finishing</option>
+                                <option value="Reserved">Reserved</option>
+                                <option value="Faulted">Faulted</option>
+                                <option value="Offline">Offline</option>
+                            </select>
+                            <i class="fa-solid fa-chevron-down absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-500 text-xs pointer-events-none"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Operations / Actions -->
+            <div class="glass-card rounded-2xl p-5">
+                <h2 class="text-sm font-semibold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-gamepad text-green-400"></i> Core Operations
+                </h2>
+                
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                    <button id="send" class="bg-dark-border hover:bg-slate-700 text-white py-2.5 rounded-lg text-sm transition-colors border border-slate-600 hover:border-slate-400 flex items-center justify-center gap-2">
+                        <i class="fa-regular fa-id-card"></i> Authorize
+                    </button>
+                    <button id="status" class="bg-dark-border hover:bg-slate-700 text-white py-2.5 rounded-lg text-sm transition-colors border border-slate-600 hover:border-slate-400 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-satellite-dish"></i> Status Notify
+                    </button>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                    <button id="start" class="bg-emerald-600/20 hover:bg-emerald-600 border border-emerald-500/50 hover:border-emerald-400 text-emerald-400 hover:text-white py-3 rounded-xl text-sm transition-all font-semibold flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-play"></i> Start TX
+                    </button>
+                    <button id="stop" class="bg-rose-600/20 hover:bg-rose-600 border border-rose-500/50 hover:border-rose-400 text-rose-400 hover:text-white py-3 rounded-xl text-sm transition-all font-semibold flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-stop"></i> Stop TX
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <button id="heartbeat" class="bg-dark-border hover:bg-slate-700 text-slate-300 py-2 rounded-lg text-xs transition-colors flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-heart-pulse text-rose-400"></i> Heartbeat
+                    </button>
+                    <button id="data_transfer" class="bg-dark-border hover:bg-slate-700 text-slate-300 py-2 rounded-lg text-xs transition-colors flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-right-left text-blue-400"></i> Data Transfer
+                    </button>
+                </div>
+            </div>
+
+            <!-- Energy Metering -->
+            <div class="glass-card rounded-2xl p-5 mb-6 lg:mb-0 relative overflow-hidden">
+                <!-- Decorative background glow -->
+                <div class="absolute -right-10 -top-10 w-32 h-32 bg-brand/10 rounded-full blur-3xl"></div>
+                
+                <h2 class="text-sm font-semibold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-gauge-high text-brand-light"></i> Energy Metering
+                </h2>
+                
+                <div class="mb-5 relative">
+                    <div class="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-500 font-mono text-sm">Wh</div>
+                    <input id="metervalue" type="text" class="w-full digital-input rounded-xl px-4 py-3 text-2xl text-right pr-12 tracking-wider" value="1000">
+                </div>
+                
+                <button id="mv" class="w-full bg-blue-600/80 hover:bg-blue-600 text-white py-2.5 rounded-lg text-sm transition-colors mb-4 flex justify-center items-center gap-2 border border-blue-500/50">
+                    <i class="fa-solid fa-paper-plane"></i> Send Current Meter Value
+                </button>
+                
+                <div class="bg-slate-900/50 rounded-xl p-3 border border-dark-border">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-xs font-semibold text-slate-400 uppercase">Auto Loop Simulator</h3>
+                        <i class="fa-solid fa-robot text-slate-500"></i>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 mb-3">
+                        <div>
+                            <label class="block text-[10px] text-slate-500 mb-1 uppercase text-center">Step (Wh)</label>
+                            <input id="meterIncrement" type="text" class="w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-xs text-center font-mono text-slate-300 focus:border-brand focus:outline-none" value="10">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-slate-500 mb-1 uppercase text-center">Interval(ms)</label>
+                            <input id="meterInterval" type="text" class="w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-xs text-center font-mono text-slate-300 focus:border-brand focus:outline-none" value="1000">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-slate-500 mb-1 uppercase text-center">Count</label>
+                            <input id="meterSendTimes" type="text" class="w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-xs text-center font-mono text-slate-300 focus:border-brand focus:outline-none" value="5">
+                        </div>
+                    </div>
+                    <button id="mvp" class="w-full bg-slate-700 hover:bg-slate-600 text-white py-2 rounded text-xs transition-colors flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-rotate"></i> Start Auto Loop
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right Panel: IDE Terminal (7 columns) -->
+        <div class="lg:col-span-7 flex flex-col glass-card rounded-2xl border border-dark-border shadow-2xl overflow-hidden h-[600px] lg:h-[calc(100vh-8rem)]">
+            
+            <!-- Terminal Header -->
+            <div class="bg-slate-900 px-4 py-2.5 flex items-center justify-between border-b border-dark-border select-none">
+                <div class="flex items-center gap-2">
+                    <div class="flex gap-1.5">
+                        <div class="w-3 h-3 rounded-full bg-rose-500"></div>
+                        <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                        <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                    </div>
+                    <span class="ml-3 font-mono text-xs text-slate-400">bash — ocpp-chargebox-simulator ~ npm run start</span>
+                </div>
+                <button onclick="$('#console').empty()" class="text-slate-500 hover:text-slate-300 transition-colors" title="Clear Console">
+                    <i class="fa-solid fa-trash-can text-sm"></i>
+                </button>
+            </div>
+
+            <!-- Terminal Output -->
+            <div id="console-wrapper" class="flex-grow p-4 overflow-y-auto font-mono text-[13px] leading-relaxed bg-[#0d1117]">
+                <ul id="console" class="space-y-1.5 break-all">
+                    <!-- Initial placeholder line -->
+                    <li class="log-info"><span class="log-time">[System]</span> Ready. Awaiting connection to Central System...</li>
+                </ul>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- jQuery CDN -->
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
+
+    <!-- Application Logic -->
+    <script>
+      var id = randomId();
+      var _websocket = null;
+      var connector_locked = false;
+
+      function randomId() {
+        var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        var r = "";
+        for (var i = 0; i < 36; i++) {
+          r += possible.charAt(Math.floor(Math.random() * possible.length));
+        }
+        return r;
+      }
+
+      // --- ระบบ Loading Button ---
+      var buttonOriginalContent = {};
+      function setButtonState(btnId, isLoading) {
+          const btn = $(`#${btnId}`);
+          if (isLoading) {
+              if (!buttonOriginalContent[btnId]) buttonOriginalContent[btnId] = btn.html();
+              btn.prop('disabled', true).addClass('opacity-70 cursor-not-allowed');
+              const text = btn.text().trim();
+              btn.html(`<i class="fa-solid fa-circle-notch fa-spin"></i> ${text}`);
+          } else {
+              if (buttonOriginalContent[btnId]) btn.html(buttonOriginalContent[btnId]);
+              btn.prop('disabled', false).removeClass('opacity-70 cursor-not-allowed');
+          }
+      }
+
+      // --- ระบบ Toast Notification ---
+      function showToast(message, type = 'info') {
+          const icons = {
+              success: '<i class="fa-solid fa-circle-check text-emerald-400"></i>',
+              error: '<i class="fa-solid fa-circle-exclamation text-rose-400"></i>',
+              info: '<i class="fa-solid fa-circle-info text-blue-400"></i>',
+              warning: '<i class="fa-solid fa-triangle-exclamation text-yellow-400"></i>'
+          };
+          const bgColors = {
+              success: 'border-emerald-500/50 bg-emerald-500/10',
+              error: 'border-rose-500/50 bg-rose-500/10',
+              info: 'border-blue-500/50 bg-blue-500/10',
+              warning: 'border-yellow-500/50 bg-yellow-500/10'
+          };
+          
+          const toast = $(`
+              <div class="glass-card flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${bgColors[type]} transform transition-all duration-300 translate-x-full opacity-0 pointer-events-auto min-w-[250px]">
+                  ${icons[type]}
+                  <p class="text-sm font-medium text-slate-200">${message}</p>
+              </div>
+          `);
+          
+          $('#toast-container').append(toast);
+          
+          setTimeout(() => toast.removeClass('translate-x-full opacity-0'), 10);
+          setTimeout(() => {
+              toast.addClass('translate-x-full opacity-0');
+              setTimeout(() => toast.remove(), 300);
+          }, 4000);
+      }
+
+      function updateLED(state) {
+          $('.indicator').removeClass('active');
+          if(state === 'disconnected') {
+              $('#red').addClass('active');
+              $('#status-text').text('DISCONNECTED').removeClass('text-emerald-400 text-yellow-400').addClass('text-rose-400');
+          } else if(state === 'connected') {
+              $('#yellow').addClass('active');
+              $('#status-text').text('STANDBY').removeClass('text-rose-400 text-emerald-400').addClass('text-yellow-400');
+          } else if(state === 'charging') {
+              $('#green').addClass('active');
+              $('#status-text').text('CHARGING').removeClass('text-rose-400 text-yellow-400').addClass('text-emerald-400');
+          } else if(state === 'transfer') {
+              $('#blue').addClass('active');
+          }
+      }
+
+      function logMsg(msg, type = "INFO") {
+        console.log(msg);
+        var time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: "numeric", minute: "numeric", second: "numeric", fractionalSecondDigits: 3 });
+        
+        let colorClass = "log-info";
+        let prefix = type;
+
+        if (typeof msg === 'string') {
+            if (msg.includes("Sending") || msg.includes("Request:")) { colorClass = "log-req"; prefix = "TX"; } 
+            else if (msg.includes("Received") || msg.includes("Response:")) { colorClass = "log-res"; prefix = "RX"; } 
+            else if (msg.includes("Error") || msg.includes("Failed") || msg.includes("Closed")) { colorClass = "log-err"; prefix = "ERR"; }
+        }
+
+        let formattedMsg = typeof msg === 'object' ? JSON.stringify(msg) : msg;
+        if (formattedMsg.startsWith('[') && formattedMsg.endsWith(']')) {
+            formattedMsg = formattedMsg.replace(/(\[|\{|\]|\})/g, '<span class="text-slate-500">$1</span>');
+            formattedMsg = formattedMsg.replace(/"([^"]+)":/g, '<span class="text-purple-300">"$1"</span>:');
+        }
+
+        $("#console").append(`<li><span class="log-time">[${time}]</span> <span class="text-[10px] font-bold px-1 rounded bg-slate-800 ${colorClass} mr-2">${prefix}</span> <span class="${colorClass}">${formattedMsg}</span></li>`);
+        var wrapper = $('#console-wrapper');
+        wrapper.scrollTop(wrapper[0].scrollHeight);
+      }
+
+      function wsConnect() {
+        var wsurl = $("select").val() || "";
+        var CP = $("#CP").val();
+
+        if (_websocket) {
+          setButtonState('connect', true);
+          _websocket.close(3001);
+        } else {
+          setButtonState('connect', true);
+          var fullUrl = wsurl + CP;
+          logMsg("Attempting connection to: " + fullUrl, "SYS");
+          
+          try {
+            _websocket = new WebSocket(fullUrl, ["ocpp1.6", "ocpp1.5"]);
+          } catch(e) {
+            setButtonState('connect', false);
+            showToast("WebSocket Creation Error!", "error");
+            logMsg("WebSocket Creation Error: " + e, "ERR");
+            return;
+          }
+          
+          _websocket.onopen = function (authorizationData) {
+            setButtonState('connect', false);
+            showToast("Connected to Central System", "success");
+            sessionStorage.setItem("LastAction", "BootNotification");
+            updateLED('connected');
+            BootNotification();
+
+            $("#connect").removeClass("bg-brand hover:bg-brand-dark shadow-[0_0_15px_rgba(79,172,254,0.3)]")
+                         .addClass("bg-rose-500 hover:bg-rose-600 shadow-[0_0_15px_rgba(244,63,94,0.3)]");
+            $("#connect-text").text("Disconnect");
+            $("#connect i").removeClass("fa-plug").addClass("fa-power-off");
+          };
+
+          _websocket.onmessage = function (msg) {
+            var ddata = JSON.parse(msg.data);
+            logMsg("Received: " + msg.data);
+            
+            $('#blue').addClass('active');
+            setTimeout(() => $('#blue').removeClass('active'), 200);
+
+            if (ddata[0] === 3) { // CallResult
+              let la = getLastAction();
+
+              // ตรวจสอบ LastAction และปลด Loading ปุ่มต่างๆ
+              if (la === "Authorize") {
+                setButtonState('send', false);
+                if(ddata[2].idTagInfo && ddata[2].idTagInfo.status === 'Accepted') showToast('Authorization Accepted', 'success');
+                else showToast('Authorization Rejected', 'error');
+              }
+              else if (la === "startTransaction") {
+                setButtonState('start', false);
+                logMsg("Transaction Approved!", "SYS");
+                showToast('Transaction Started!', 'success');
+                var transactionId = ddata[2].transactionId;
+                $("#transactionId").val(transactionId);
+                $("#ConnectorStatus").val("Charging").trigger('change');
+              }
+              else if (la === "stopTransaction") {
+                setButtonState('stop', false);
+                showToast('Transaction Stopped!', 'success');
+                $("#ConnectorStatus").val("Finishing").trigger('change');
+              }
+              else if (la === "Heartbeat") {
+                setButtonState('heartbeat', false);
+                showToast('Heartbeat Acknowledged', 'info');
+              }
+              else if (la === "StatusNotification") {
+                setButtonState('status', false);
+                showToast('Status Notified', 'success');
+              }
+              else if (la === "DataTransfer") {
+                setButtonState('data_transfer', false);
+                showToast('Data Transfer Completed', 'success');
+              }
+              else if (la === "MeterValues") {
+                setButtonState('mv', false);
+                showToast('Meter Value Sent', 'success');
+              }
+              else if (la === "BootNotification") {
+                showToast('BootNotification Accepted', 'success');
+              }
+              
+            } else if (ddata[0] === 4) { // CallError
+              logMsg("Data exchange failed - JSON not accepted!", "ERR");
+              showToast("Server returned an error!", "error");
+              // ปลดล็อคทุกปุ่มเผื่อ Error
+              ['send', 'start', 'stop', 'heartbeat', 'mv', 'status', 'data_transfer'].forEach(btn => setButtonState(btn, false));
+              
+            } else if (ddata[0] === 2) { // Call (Server สั่งมา)
+              id = ddata[1]; 
+              let action = ddata[2];
+
+              switch (action) {
+                case "Reset":
+                  _websocket.send(JSON.stringify([3, id, { status: "Accepted" }]));
+                  showToast("Reset requested. Reloading...", "warning");
+                  logMsg("Reset requested. Reloading...", "SYS");
+                  setTimeout(() => location.reload(), 2000);
+                  break;
+                case "RemoteStopTransaction":
+                  _websocket.send(JSON.stringify([3, id, { status: "Accepted" }]));
+                  if (ddata[3].transactionId) {
+                      $("#transactionId").val(ddata[3].transactionId);
+                  }
+                  stopTransaction();
+                  break;
+                case "RemoteStartTransaction":
+                  $("#TAG").val(ddata[3].idTag);
+                  _websocket.send(JSON.stringify([3, id, { status: "Accepted" }]));
+                  startTransaction();
+                  break;
+                case "UnlockConnector":
+                  _websocket.send(JSON.stringify([3, id, { status: "Unlocked" }]));
+                  showToast("Connector Unlocked by Remote", "info");
+                  logMsg("Connector Unlocked", "SYS");
+                  break;
+                case "TriggerMessage":
+                  if(ddata[3].requestedMessage === "MeterValues") {
+                      _websocket.send(JSON.stringify([3, id, { status: "Accepted" }]));
+                      send_meterValue();
+                  } else {
+                      _websocket.send(JSON.stringify([4, id, "NotImplemented", "", {}]));
+                  }
+                  break;
+                default:
+                  _websocket.send(JSON.stringify([4, id, "NotImplemented", "", {}]));
+                  break;
+              }
+            }
+          };
+
+          _websocket.onclose = function (evt) {
+            setButtonState('connect', false);
+            $("#connect").removeClass("bg-rose-500 hover:bg-rose-600 shadow-[0_0_15px_rgba(244,63,94,0.3)]")
+                         .addClass("bg-brand hover:bg-brand-dark shadow-[0_0_15px_rgba(79,172,254,0.3)]");
+            $("#connect-text").text("Connect");
+            $("#connect i").removeClass("fa-power-off").addClass("fa-plug");
+            
+            updateLED('disconnected');
+            
+            if (evt.code == 3001) {
+              logMsg("WebSocket Closed Manually", "SYS");
+              showToast("Disconnected manually", "info");
+            } else {
+              logMsg("WebSocket Connection Error: " + evt.code, "ERR");
+              showToast("Connection Closed/Error", "error");
+            }
+            _websocket = null;
+          };
+
+          _websocket.onerror = function (evt) {
+            setButtonState('connect', false);
+            if (_websocket && _websocket.readyState == 1) {
+              updateLED('disconnected');
+              logMsg("WebSocket Error", "ERR");
+            }
+          };
+        }
+      }
+
+      function Authorize() {
+        if(!_websocket || _websocket.readyState !== 1) { showToast("Not connected!", "error"); return logMsg("Not connected!", "ERR"); }
+        setButtonState('send', true);
+        setTimeout(() => setButtonState('send', false), 8000); // Fail-safe fallback
+
+        sessionStorage.setItem("LastAction", "Authorize");
+        var Auth = JSON.stringify([2, id, "Authorize", { idTag: $("#TAG").val() }]);
+        logMsg("Sending Authorize: " + Auth);
+        _websocket.send(Auth);
+      }
+
+      function startTransaction() {
+        if(!_websocket || _websocket.readyState !== 1) { showToast("Not connected!", "error"); return logMsg("Not connected!", "ERR"); }
+        setButtonState('start', true);
+        setTimeout(() => setButtonState('start', false), 8000);
+
+        sessionStorage.setItem("LastAction", "startTransaction");
+        updateLED('charging');
+        
+        var strtT = JSON.stringify([
+          2, id, "StartTransaction",
+          {
+            connectorId: parseInt($("#CUID").val()),
+            idTag: $("#TAG").val(),
+            timestamp: new Date().toISOString(),
+            meterStart: parseInt($("#metervalue").val()),
+            reservationId: 0,
+          }
+        ]);
+        logMsg("Sending StartTransaction: " + strtT);
+        _websocket.send(strtT);
+      }
+
+      function stopTransaction() {
+        if(!_websocket || _websocket.readyState !== 1) { showToast("Not connected!", "error"); return logMsg("Not connected!", "ERR"); }
+        setButtonState('stop', true);
+        setTimeout(() => setButtonState('stop', false), 8000);
+
+        sessionStorage.setItem("LastAction", "stopTransaction");
+        updateLED('connected'); 
+        
+        var stpT = JSON.stringify([
+          2, id, "StopTransaction",
+          {
+            transactionId: Number($("#transactionId").val()),
+            idTag: $("#TAG").val(),
+            timestamp: new Date().toISOString(),
+            meterStop: parseInt($("#metervalue").val()),
+            reason: "Remote",
+            "transactionData": [{
+                "timestamp": new Date().toISOString(),
+                "sampledValue": [{
+                  "context": "Sample.Periodic",
+                  "format": "Raw",
+                  "location": "Outlet",
+                  "measurand": "Energy.Active.Import.Register",
+                  "unit": "Wh",
+                  "value": $("#metervalue").val()
+                }]
+            }]
+          }
+        ]);
+        logMsg("Sending StopTransaction: " + stpT);
+        _websocket.send(stpT);
+      }
+
+      function getLastAction() {
+        return sessionStorage.getItem("LastAction");
+      }
+
+      function BootNotification() {
+        var BN = JSON.stringify([
+          2, id, "BootNotification",
+          {
+            chargePointVendor: "INFINITY-Systems",
+            chargePointModel: "NEXUS-Pro-AC",
+            chargePointSerialNumber: "INF.001.24",
+            chargeBoxSerialNumber: "INF.CB.001",
+            firmwareVersion: "2.1.0",
+            meterType: "INF Digital Meter"
+          }
+        ]);
+        logMsg("Sending BootNotification: " + BN);
+        _websocket.send(BN);
+      }
+
+      function send_heartbeat() {
+        if(!_websocket || _websocket.readyState !== 1) { showToast("Not connected!", "error"); return logMsg("Not connected!", "ERR"); }
+        setButtonState('heartbeat', true);
+        setTimeout(() => setButtonState('heartbeat', false), 8000);
+
+        sessionStorage.setItem("LastAction", "Heartbeat");
+        var HB = JSON.stringify([2, id, "Heartbeat", {}]);
+        logMsg("Sending Heartbeat: " + HB);
+        _websocket.send(HB);
+      }
+
+      function send_meterValue() {
+        if(!_websocket || _websocket.readyState !== 1) { showToast("Not connected!", "error"); return logMsg("Not connected!", "ERR"); }
+        setButtonState('mv', true);
+        setTimeout(() => setButtonState('mv', false), 8000);
+
+        sessionStorage.setItem("LastAction", "MeterValues");
+        var val = $("#metervalue").val();
+        var MV = JSON.stringify([
+          2, id, "MeterValues",
+          {
+            connectorId: parseInt($("#CUID").val()),
+            transactionId: Number($("#transactionId").val()),
+            meterValue: [{
+                timestamp: new Date().toISOString(),
+                sampledValue: [
+                    { context: "Sample.Periodic", format: "Raw", measurand: "Energy.Active.Import.Register", unit: "Wh", value: val },
+                    { context: "Sample.Periodic", format: "Raw", location: "EV", measurand: "SoC", unit: "Percent", value: "85" }
+                ]
+            }]
+          }
+        ]);
+
+        logMsg("Sending MeterValues ("+val+" Wh): " + MV);
+        _websocket.send(MV);
+      }
+
+      $(document).ready(function () {
+        updateLED('disconnected');
+
+        $("#connect").click(function () { wsConnect(); });
+        $("#send").click(function () { Authorize(); });
+        $("#start").click(function () { startTransaction(); });
+        $("#stop").click(function () { stopTransaction(); });
+        $("#mv").click(function () { send_meterValue(); });
+        $("#heartbeat").click(function () { send_heartbeat(); });
+
+        $("#ConnectorStatus").change(function() {
+            let s = $(this).val();
+            if(s === "Charging") updateLED('charging');
+            else if(s === "Available" || s === "Finishing") updateLED('connected');
+            else if(s === "Faulted" || s === "Offline") updateLED('disconnected');
+            
+            if(_websocket && _websocket.readyState === 1) $("#status").trigger('click');
+        });
+
+        let loopInterval;
+        $("#mvp").click(function () {
+          if($(this).hasClass('active-loop')) {
+              clearInterval(loopInterval);
+              $(this).removeClass('active-loop bg-rose-600').addClass('bg-slate-700');
+              $(this).html('<i class="fa-solid fa-rotate"></i> Start Auto Loop');
+              showToast("Auto Loop Stopped", "info");
+              logMsg("Auto Loop Stopped", "SYS");
+              return;
+          }
+
+          if(!_websocket || _websocket.readyState !== 1) { showToast("Not connected!", "error"); return logMsg("Not connected!", "ERR"); }
+
+          var i = Number($("#meterInterval").val()) || 1000;
+          var counter = Number($("#meterSendTimes").val()) || 5;
+          var incrementvalue = Number($("#meterIncrement").val()) || 10;
+          var timesRun = 0;
+          
+          showToast("Started Meter Values Loop", "success");
+          logMsg(`Starting Meter Values Loop (${counter} times, every ${i}ms, +${incrementvalue}Wh)`, "SYS");
+          
+          $(this).addClass('active-loop bg-rose-600').removeClass('bg-slate-700');
+          $(this).html('<i class="fa-solid fa-stop"></i> Stop Auto Loop');
+
+          loopInterval = setInterval(function () {
+            timesRun += 1;
+            var currentVal = Number($("#metervalue").val());
+            $("#metervalue").val(currentVal + incrementvalue);
+            
+            send_meterValue();
+            
+            if (timesRun >= counter) {
+              clearInterval(loopInterval);
+              $("#mvp").removeClass('active-loop bg-rose-600').addClass('bg-slate-700');
+              $("#mvp").html('<i class="fa-solid fa-rotate"></i> Start Auto Loop');
+              showToast("Auto Loop Completed", "success");
+              logMsg("Auto Loop Completed", "SYS");
+            }
+          }, i);
+        });
+
+        $("#status").click(function () {
+          if(!_websocket || _websocket.readyState !== 1) { showToast("Not connected!", "error"); return logMsg("Not connected!", "ERR"); }
+          setButtonState('status', true);
+          setTimeout(() => setButtonState('status', false), 8000);
+
+          sessionStorage.setItem("LastAction", "StatusNotification");
+          var currentStatus = $("#ConnectorStatus").val();
+          var SN = JSON.stringify([
+            2, id, "StatusNotification",
+            {
+              connectorId: parseInt($("#CUID").val()),
+              status: currentStatus,
+              errorCode: "NoError",
+              info: "",
+              timestamp: new Date().toISOString(),
+              vendorId: "",
+              vendorErrorCode: "",
+            }
+          ]);
+          logMsg("Sending StatusNotification: " + SN);
+          _websocket.send(SN);
+        });
+
+        $("#data_transfer").click(function () {
+          if(!_websocket || _websocket.readyState !== 1) { showToast("Not connected!", "error"); return logMsg("Not connected!", "ERR"); }
+          setButtonState('data_transfer', true);
+          setTimeout(() => setButtonState('data_transfer', false), 8000);
+
+          sessionStorage.setItem("LastAction", "DataTransfer");
+          var DT = JSON.stringify([
+            2, id, "DataTransfer",
+            { vendorId: "INFINITY", messageId: "CustomCommand", data: "Test Payload" }
+          ]);
+          logMsg("Sending DataTransfer: " + DT);
+          _websocket.send(DT);
+        });
+      });
+    </script>
+</body>
+</html>
