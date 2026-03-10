@@ -91,7 +91,8 @@ function TabsContent({
             })
         }
         if (typeof ref === 'function') ref(el)
-        else if (ref) (ref as React.RefObject<HTMLDivElement>).current = el
+        else if (ref)
+          (ref as React.RefObject<HTMLDivElement | null>).current = el
       }}
       className={cn('flex-1 text-sm outline-none', className)}
       {...props}
