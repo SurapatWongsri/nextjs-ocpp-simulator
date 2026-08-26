@@ -2,7 +2,7 @@
  * OCPP Simulator store — Zustand v5
  *
  * WebSocket instances live in a module-level Map (non-serialisable, intentionally
- * outside Zustand) keyed by chargerId.  Everything else is tracked in Zustand state.
+ * outside Zustand) keyed by chargerId.  Everything else is tracked in Zustand state.sdsadsdasda
  */
 
 import {
